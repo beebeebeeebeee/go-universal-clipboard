@@ -4,21 +4,25 @@ import (
 	"github.com/gin-gonic/gin"
 	"math/rand"
 	"net/http"
+	"path/filepath"
 	"time"
 	_ "time/tzdata"
 )
 
 type StaticController struct {
+	staticPath string
 }
 
 func NewStaticController() StaticController {
-	return StaticController{}
+	return StaticController{
+		staticPath: filepath.Join("internal", "app", "infrastructure", "gin", "static"),
+	}
 }
 
 func (rc *StaticController) Setup(g *gin.RouterGroup) {
 	rg := g.Group("")
 	{
-		rg.Static("/static", "./internal/app/infrastructure/gin/static")
+		rg.Static("/static", rc.staticPath)
 		rg.GET("", rc.generateRoomID)
 		rg.GET("/:roomId", rc.getRoom)
 	}
@@ -44,5 +48,5 @@ func (rc *StaticController) getRoom(c *gin.Context) {
 		return
 	}
 
-	c.File("./internal/app/infrastructure/gin/static/index.html")
+	c.File(filepath.Join(rc.staticPath, "index.html"))
 }
