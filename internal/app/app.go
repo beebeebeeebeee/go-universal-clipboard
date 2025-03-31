@@ -34,7 +34,7 @@ func NewApp(cfg *cfg.Config) *App {
 func (a *App) Run() {
 	app := fx.New(a.module, fx.Options(
 		fx.Invoke(func(
-			routes *route.Routes,
+			routes route.Routes,
 			requestHandler gin.RequestHandler,
 		) {
 			requestHandler.Gin.Use(cors.New(cors.Config{

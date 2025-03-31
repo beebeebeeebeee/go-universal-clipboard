@@ -18,26 +18,8 @@ jobs:
           cat << EOF > config.yaml
           app:
             port: ${{ vars.APP_PORT }}
-            apiKey: ${{ secrets.APP_API_KEY }}
-            signerKey: ${{ secrets.APP_SIGNER_KEY }}
-          
-          jwt:
-            publicKey: |
-          $(echo "${{ vars.JWT_PUBLIC_KEY }}" | sed 's/^/    /')
-            privateKey: |
-          $(echo "${{ secrets.JWT_PRIVATE_KEY }}" | sed 's/^/    /')
-            kid: ${{ vars.JWT_KID }}
-            accessTokenDurationInMinute: ${{ vars.JWT_ACCESS_TOKEN_DURATION_IN_MINUTE }}
-            refreshTokenDurationInMinute: ${{ vars.JWT_REFRESH_TOKEN_DURATION_IN_MINUTE }}
-            registerTokenDurationInMinute: ${{ vars.JWT_REGISTER_TOKEN_DURATION_IN_MINUTE }}
-            issuer: ${{ vars.JWT_ISSUER }}
-          
-          database:
-            host: ${{ vars.DB_HOST }}
-            port: ${{ vars.DB_PORT }}
-            name: ${{ vars.DB_NAME }}
-            user: ${{ vars.DB_USER }}
-            password: ${{ secrets.DB_PASSWORD }}
+            roomEmptyCleanupMinutes: ${{ vars.ROOM_EMPTY_CLEANUP_MINUTES }}
+            roomIdleCleanupMinutes: ${{ vars.ROOM_IDLE_CLEANUP_MINUTES }}
           EOF
 
       - name: Build Docker image

@@ -42,12 +42,25 @@
 
         .room-info {
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 15px;
             padding: 15px;
             background-color: var(--secondary-color);
             border-radius: 8px;
             margin-bottom: 20px;
+        }
+
+        .room-details {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .room-id-container {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            justify-content: space-between;
         }
 
         .room-id {
@@ -56,11 +69,18 @@
             color: var(--primary-color);
         }
 
-        .qr-container {
+        .room-url {
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #666;
+            word-break: break-all;
+        }
+
+        .qr-section {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 10px;
+            gap: 15px;
         }
 
         #qrcode {
@@ -129,27 +149,112 @@
         .copy-button:hover {
             background-color: #357abd;
         }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
+            .header {
+                margin-bottom: 20px;
+                padding-bottom: 15px;
+            }
+
+            h1 {
+                margin: 0;
+                font-size: 1.5em;
+            }
+
+            .room-info {
+                flex-direction: column;
+                gap: 20px;
+            }
+
+            .room-details {
+                width: 100%;
+            }
+
+            .qr-section {
+                width: 100%;
+            }
+        }
+
+        .textarea-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .button-container {
+            align-self: flex-end;
+            display: flex;
+            gap: 10px;
+        }
+
+        .clear-board-button,
+        .copy-content-button,
+        .change-room-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background-color 0.3s ease;
+        }
+
+        .change-room-button {
+            background-color: #dc3545;  /* Red color to distinguish it */
+        }
+
+        .change-room-button:hover {
+            background-color: #c82333;
+        }
+
+        .copy-content-button:hover {
+            background-color: #357abd;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>Universal Clipboard</h1>
-            <button class="copy-button" onclick="copyRoomId()">Copy Room ID</button>
         </div>
         
         <div class="room-info">
-            <div>
-                <strong>Room ID:</strong>
-                <span id="roomId" class="room-id"></span>
+            <div class="room-details">
+                <div class="room-id-container">
+                    <div>
+                        <strong>Room ID:</strong>
+                        <span id="roomId" class="room-id"></span>
+                    </div>
+                    <button class="change-room-button" onclick="changeRoom()">Change Room</button>
+                </div>
+                <div>
+                    <strong>URL:</strong>
+                    <div id="roomUrl" class="room-url"></div>
+                </div>
             </div>
-            <div class="qr-container">
+            <div class="qr-section">
                 <div id="qrcode"></div>
                 <span class="qr-label">Scan to join room</span>
+                <button class="copy-button" onclick="copyRoomUrl()">Copy Room URL</button>
             </div>
         </div>
 
-        <textarea id="clipboard" placeholder="Type or paste text here..."></textarea>
+        <div class="textarea-section">
+            <textarea id="clipboard" placeholder="Type or paste text here..."></textarea>
+            <div class="button-container">
+                <button class="clear-board-button" onclick="clearBoard()">Clear Board</button>
+                <button class="copy-content-button" onclick="copyContent()">Copy Content</button>
+            </div>
+        </div>
         
         <div id="status" class="status disconnected">Disconnected</div>
     </div>
@@ -157,19 +262,67 @@
     <script>
         const roomId = window.location.pathname.substring(1);
         const roomIdElement = document.getElementById('roomId');
+        const roomUrlElement = document.getElementById('roomUrl');
         const statusElement = document.getElementById('status');
+        const currentUrl = window.location.href;
+
         roomIdElement.textContent = roomId;
+        roomUrlElement.textContent = currentUrl;
 
         // Generate QR code
-        const currentUrl = window.location.href;
         const qr = qrcode(0, 'M');
         qr.addData(currentUrl);
         qr.make();
         document.getElementById('qrcode').innerHTML = qr.createImgTag(4);
 
-        // Copy room ID function
-        function copyRoomId() {
-            navigator.clipboard.writeText(roomId).then(() => {
+        let ws;
+        let reconnectAttempt = 0;
+        const maxReconnectDelay = 5000; // Maximum delay of 5 seconds
+
+        function connect() {
+            ws = new WebSocket(`ws://${window.location.host}/ws?room=${roomId}`);
+            
+            ws.onmessage = function(event) {
+                textarea.value = event.data;
+            };
+
+            ws.onopen = function() {
+                statusElement.textContent = 'Connected';
+                statusElement.className = 'status connected';
+                reconnectAttempt = 0;
+            };
+
+            ws.onclose = function() {
+                statusElement.textContent = 'Disconnected - Reconnecting...';
+                statusElement.className = 'status disconnected';
+                
+                // Calculate reconnect delay with exponential backoff
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), maxReconnectDelay);
+                reconnectAttempt++;
+                
+                setTimeout(connect, delay);
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                statusElement.textContent = 'Connection Error - Reconnecting...';
+                statusElement.className = 'status disconnected';
+            };
+        }
+
+        const textarea = document.getElementById('clipboard');
+        textarea.addEventListener('input', function() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(textarea.value);
+            }
+        });
+
+        // Initial connection
+        connect();
+
+        // Copy room URL function
+        function copyRoomUrl() {
+            navigator.clipboard.writeText(currentUrl).then(() => {
                 const button = document.querySelector('.copy-button');
                 const originalText = button.textContent;
                 button.textContent = 'Copied!';
@@ -179,32 +332,34 @@
             });
         }
 
-        const ws = new WebSocket(`ws://${window.location.host}/ws?room=${roomId}`);
-        const textarea = document.getElementById('clipboard');
+        function clearBoard() {
+            textarea.value = '';
+            textarea.focus();
+            ws.send('');
+            const button = document.querySelector('.clear-board-button');
+            const originalText = button.textContent;
+            button.textContent = 'Cleared!';
+            setTimeout(() => {
+                button.textContent = originalText;
+            }, 2000);
+        }
 
-        ws.onmessage = function(event) {
-            textarea.value = event.data;
-        };
+        // Copy textarea content function
+        function copyContent() {
+            const content = document.getElementById('clipboard').value;
+            navigator.clipboard.writeText(content).then(() => {
+                const button = document.querySelector('.copy-content-button');
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                }, 2000);
+            });
+        }
 
-        textarea.addEventListener('input', function() {
-            ws.send(textarea.value);
-        });
-
-        ws.onopen = function() {
-            statusElement.textContent = 'Connected';
-            statusElement.className = 'status connected';
-        };
-
-        ws.onclose = function() {
-            statusElement.textContent = 'Disconnected';
-            statusElement.className = 'status disconnected';
-        };
-
-        ws.onerror = function(error) {
-            console.error('WebSocket error:', error);
-            statusElement.textContent = 'Connection Error';
-            statusElement.className = 'status disconnected';
-        };
+        function changeRoom() {
+            window.location.href = '/';
+        }
     </script>
 </body>
 </html> 

@@ -2,12 +2,15 @@ package domain
 
 import (
 	"sync"
+	"time"
 )
 
 type Room struct {
-	ID      string
-	Clients map[*Client]bool
-	mu      sync.RWMutex
+	ID          string
+	Clients     map[*Client]bool
+	LastMessage []byte
+	LastUpdated time.Time
+	mu          sync.RWMutex
 }
 
 type Client struct {
@@ -17,12 +20,19 @@ type Client struct {
 
 func NewRoom(id string) *Room {
 	return &Room{
-		ID:      id,
-		Clients: make(map[*Client]bool),
+		ID:          id,
+		Clients:     make(map[*Client]bool),
+		LastMessage: []byte{},
+		LastUpdated: time.Now(),
 	}
 }
 
 func (r *Room) Broadcast(message []byte) {
+	r.mu.Lock()
+	r.LastMessage = message
+	r.LastUpdated = time.Now()
+	r.mu.Unlock()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -37,6 +47,11 @@ func (r *Room) Broadcast(message []byte) {
 }
 
 func (r *Room) BroadcastToOthers(sender *Client, message []byte) {
+	r.mu.Lock()
+	r.LastMessage = message
+	r.LastUpdated = time.Now()
+	r.mu.Unlock()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -56,6 +71,7 @@ func (r *Room) AddClient(client *Client) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.Clients[client] = true
+	r.LastUpdated = time.Now()
 }
 
 func (r *Room) RemoveClient(client *Client) {
@@ -63,6 +79,21 @@ func (r *Room) RemoveClient(client *Client) {
 	defer r.mu.Unlock()
 	if _, ok := r.Clients[client]; ok {
 		delete(r.Clients, client)
+		r.LastUpdated = time.Now()
 	}
 	close(client.Send)
+}
+
+// GetClientCount returns the number of clients in the room
+func (r *Room) GetClientCount() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.Clients)
+}
+
+// GetLastUpdated returns the last update time of the room
+func (r *Room) GetLastUpdated() time.Time {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.LastUpdated
 }
