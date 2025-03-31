@@ -280,7 +280,7 @@
         const maxReconnectDelay = 5000; // Maximum delay of 5 seconds
 
         function connect() {
-            ws = new WebSocket(`ws://${window.location.host}/ws?room=${roomId}`);
+            ws = new WebSocket(`wss://${window.location.host}/ws?room=${roomId}`);
             
             ws.onmessage = function(event) {
                 textarea.value = event.data;
