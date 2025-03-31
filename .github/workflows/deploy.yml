@@ -1,0 +1,74 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create env file
+        run: |
+          cat << EOF > config.yaml
+          app:
+            port: ${{ vars.APP_PORT }}
+            apiKey: ${{ secrets.APP_API_KEY }}
+            signerKey: ${{ secrets.APP_SIGNER_KEY }}
+          
+          jwt:
+            publicKey: |
+          $(echo "${{ vars.JWT_PUBLIC_KEY }}" | sed 's/^/    /')
+            privateKey: |
+          $(echo "${{ secrets.JWT_PRIVATE_KEY }}" | sed 's/^/    /')
+            kid: ${{ vars.JWT_KID }}
+            accessTokenDurationInMinute: ${{ vars.JWT_ACCESS_TOKEN_DURATION_IN_MINUTE }}
+            refreshTokenDurationInMinute: ${{ vars.JWT_REFRESH_TOKEN_DURATION_IN_MINUTE }}
+            registerTokenDurationInMinute: ${{ vars.JWT_REGISTER_TOKEN_DURATION_IN_MINUTE }}
+            issuer: ${{ vars.JWT_ISSUER }}
+          
+          database:
+            host: ${{ vars.DB_HOST }}
+            port: ${{ vars.DB_PORT }}
+            name: ${{ vars.DB_NAME }}
+            user: ${{ vars.DB_USER }}
+            password: ${{ secrets.DB_PASSWORD }}
+          EOF
+
+      - name: Build Docker image
+        run: |
+          docker build -t go-universal-clipboard_app:${{ github.sha }} .
+          docker save go-universal-clipboard_app:${{ github.sha }} > go-universal-clipboard-image.tar
+
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: ${{ vars.SSH_KNOWN_HOSTS }}
+
+      - name: Deploy to VM
+        run: |
+          scp go-universal-clipboard-image.tar ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }}:~/go-universal-clipboard-image.tar
+
+          ssh ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }} "
+            docker load < ~/go-universal-clipboard-image.tar
+
+            docker stop go-universal-clipboard_app || true
+            docker rm go-universal-clipboard_app || true
+
+            docker run -d \
+              --name go-universal-clipboard_app \
+              --restart unless-stopped \
+              --log-driver fluentd \
+              --log-opt fluentd-address=localhost:24224 \
+              --log-opt tag=app.logs \
+              -p ${{ vars.APP_PORT }}:${{ vars.APP_PORT }} \
+              go-universal-clipboard_app:${{ github.sha }}
+
+            rm ~/go-universal-clipboard-image.tar
+          "

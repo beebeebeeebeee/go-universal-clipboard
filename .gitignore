@@ -1,0 +1,33 @@
+# IDE specific files
+.idea/
+
+# Environment variables
+config.yaml*
+!config.yaml.template
+
+
+# Database files
+*.db
+
+# Compiled binary
+tmp/
+main
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Go specific files
+bin/
+pkg/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Dependency directories
+vendor/
+
