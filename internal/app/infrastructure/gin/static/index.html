@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
     <title>Universal Clipboard</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <style>
         :root {
@@ -273,21 +274,29 @@
         const qr = qrcode(0, 'M');
         qr.addData(currentUrl);
         qr.make();
-        document.getElementById('qrcode').innerHTML = qr.createImgTag(4);
+        document.getElementById('qrcode').innerHTML = qr.createImgTag(5, 2);
 
         let ws;
         let reconnectAttempt = 0;
         const maxReconnectDelay = 5000; // Maximum delay of 5 seconds
 
         function connect() {
-            ws = new WebSocket(`wss://${window.location.host}/ws?room=${roomId}`);
+            ws = new WebSocket(`${window.location.protocol.replace('http', 'ws')}//${window.location.host}/ws?room=${roomId}`);
             
             ws.onmessage = function(event) {
-                textarea.value = event.data;
+                const data = JSON.parse(event.data);
+                if (data.type === "message") {
+                    textarea.value = data.payload;
+                } else if (data.type === "info") {
+                    const info = JSON.parse(data.payload);
+                    if (info.client_count !== undefined) {
+                        document.getElementById('clientCount').textContent = info.client_count > 1 ? `${info.client_count} Users` : '1 User';
+                    }
+                }
             };
 
             ws.onopen = function() {
-                statusElement.textContent = 'Connected';
+                statusElement.innerHTML = 'Connected - <span id="clientCount">1 User</span>';
                 statusElement.className = 'status connected';
                 reconnectAttempt = 0;
             };
@@ -313,7 +322,11 @@
         const textarea = document.getElementById('clipboard');
         textarea.addEventListener('input', function() {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(textarea.value);
+                const message = {
+                    type: "message",
+                    payload: textarea.value
+                };
+                ws.send(JSON.stringify(message));
             }
         });
 
@@ -335,7 +348,11 @@
         function clearBoard() {
             textarea.value = '';
             textarea.focus();
-            ws.send('');
+            const message = {
+                type: "message",
+                payload: ""
+            };
+            ws.send(JSON.stringify(message));
             const button = document.querySelector('.clear-board-button');
             const originalText = button.textContent;
             button.textContent = 'Cleared!';

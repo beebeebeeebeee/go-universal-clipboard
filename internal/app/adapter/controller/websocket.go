@@ -132,7 +132,6 @@ func (c *WebSocketController) HandleWebSocket(ctx *gin.Context) {
 		select {
 		case client.Send <- room.LastMessage:
 		default:
-			// If the send channel is full, we'll skip sending the latest message
 			log.Printf("Failed to send latest message to new client in room %s: send buffer full", roomID)
 		}
 	}
@@ -151,9 +150,22 @@ func (c *WebSocketController) readPump(client *domain.Client, conn *websocket.Co
 		_, message, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				// log error
+				log.Printf("WebSocket error: %v", err)
 			}
 			break
+		}
+
+		// Validate the message format
+		msg, err := domain.FromJSON(message)
+		if err != nil {
+			log.Printf("Invalid message format: %v", err)
+			continue
+		}
+
+		// Only process messages of type "message"
+		if msg.Type != "message" {
+			log.Printf("Unsupported message type: %s", msg.Type)
+			continue
 		}
 
 		client.Room.BroadcastToOthers(client, message)
@@ -187,10 +199,17 @@ func (c *WebSocketController) HandleRoomInfo(ctx *gin.Context) {
 
 	roomInfos := make([]RoomInfo, 0, len(c.rooms))
 	for id, room := range c.rooms {
+		var lastMessage string
+		if len(room.LastMessage) > 0 {
+			if msg, err := domain.FromJSON(room.LastMessage); err == nil {
+				lastMessage = msg.Payload
+			}
+		}
+
 		roomInfos = append(roomInfos, RoomInfo{
 			ID:          id,
 			ClientCount: room.GetClientCount(),
-			LastMessage: string(room.LastMessage),
+			LastMessage: lastMessage,
 			LastUpdated: room.GetLastUpdated(),
 		})
 	}
